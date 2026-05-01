@@ -35,7 +35,11 @@ app.use(
 // Health check (sin auth)
 app.get('/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
-// Autenticación global para todas las rutas /api/v1
+// Rutas públicas (sin auth) — deben registrarse ANTES del middleware
+app.post('/api/v1/auth/login', (c) => authRoutes.fetch(c.req.raw, c.env));
+app.post('/api/v1/auth/verify', (c) => authRoutes.fetch(c.req.raw, c.env));
+
+// Autenticación global para todas las rutas protegidas
 app.use('/api/v1/*', authMiddleware);
 
 const v1 = new Hono<{ Bindings: AppEnv; Variables: Variables }>();

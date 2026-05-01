@@ -119,11 +119,15 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('scp_token');
+  const authHeader: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...(init?.headers ?? {}),
     },
   });

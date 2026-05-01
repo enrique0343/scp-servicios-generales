@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Layout from './components/Layout';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Plantilla from './pages/Plantilla';
 import PlanMensual from './pages/PlanMensual';
@@ -8,25 +9,18 @@ import SnapshotDiario from './pages/SnapshotDiario';
 import Excepciones from './pages/Excepciones';
 
 export default function App() {
-  const { isLoading, error } = useAuth();
+  const { step } = useAuth();
 
-  if (isLoading) {
+  if (step === 'loading') {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-bg-alt">
         <div className="text-secundario text-sm">Cargando...</div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <p className="text-danger font-semibold">Error de autenticación</p>
-          <p className="text-secundario text-sm mt-1">{error}</p>
-        </div>
-      </div>
-    );
+  if (step === 'email' || step === 'otp') {
+    return <Login />;
   }
 
   return (
