@@ -1,0 +1,5 @@
+name = "scp-frontend"
+pages_build_output_dir = "dist"
+
+[vars]
+WORKER_URL = "https://scp-api.enrique0343.workers.dev"

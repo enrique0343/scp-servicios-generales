@@ -8,7 +8,7 @@ export async function authMiddleware(
   c: Context<{ Bindings: AppEnv; Variables: HonoVariables }>,
   next: Next
 ): Promise<Response | void> {
-  // Bypass para desarrollo local (nunca activo en production)
+  // Bypass para desarrollo local
   if (c.env.CF_ACCESS_BYPASS === 'true' && c.env.ENVIRONMENT !== 'production') {
     const devEmail = c.req.header('X-Dev-Email');
     if (devEmail) {
@@ -22,28 +22,40 @@ export async function authMiddleware(
     }
   }
 
+  // Cloudflare Access inyecta el JWT en este header cuando el usuario ya está autenticado
   const jwt = c.req.header('Cf-Access-Jwt-Assertion');
+
   if (!jwt) {
-    return c.json({ error: { code: 'MISSING_TOKEN', message: 'Token de acceso requerido' } }, 401);
+    return c.json({
+      error: { code: 'MISSING_TOKEN', message: 'Token de acceso requerido' },
+    }, 401);
   }
 
-  const email = await validateCfAccessJwt(jwt, c.env.ACCESS_AUD, c.env.ACCESS_TEAM_DOMAIN);
-  if (!email) {
-    return c.json({ error: { code: 'INVALID_TOKEN', message: 'Token inválido o expirado' } }, 401);
+  const result = await validateCfAccessJwt(jwt, c.env.ACCESS_AUD, c.env.ACCESS_TEAM_DOMAIN);
+
+  if (!result.ok) {
+    return c.json({
+      error: { code: 'INVALID_TOKEN', message: result.error },
+    }, 401);
   }
 
-  const usuario = await getUsuarioByEmail(c.env.DB, email);
+  const usuario = await getUsuarioByEmail(c.env.DB, result.email);
   if (!usuario) {
-    return c.json({ error: { code: 'USER_NOT_FOUND', message: 'Usuario no autorizado en el sistema' } }, 401);
+    return c.json({
+      error: { code: 'USER_NOT_FOUND', message: `Email ${result.email} no autorizado en el sistema` },
+    }, 401);
   }
 
   c.set('user', { email: usuario.email, rol: usuario.rol });
-  c.executionCtx.waitUntil(updateUltimoAcceso(c.env.DB, email));
+  c.executionCtx.waitUntil(updateUltimoAcceso(c.env.DB, result.email));
 
   await next();
 }
 
-// Convierte base64url → Uint8Array sin depender de atob (que falla con padding incorrecto)
+type JwtResult =
+  | { ok: true; email: string }
+  | { ok: false; error: string };
+
 function base64urlToBytes(b64url: string): Uint8Array {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
   const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
@@ -55,68 +67,124 @@ function base64urlToBytes(b64url: string): Uint8Array {
   return bytes;
 }
 
-function base64urlToJson<T>(b64url: string): T {
+function decodeJwtPart<T>(b64url: string): T {
   return JSON.parse(new TextDecoder().decode(base64urlToBytes(b64url))) as T;
 }
 
-// Cloudflare Access firma con ES256 (ECDSA P-256 + SHA-256)
 async function validateCfAccessJwt(
   token: string,
   audience: string,
   teamDomain: string
-): Promise<string | null> {
+): Promise<JwtResult> {
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      return { ok: false, error: `JWT malformado: ${parts.length} partes` };
+    }
 
     const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];
 
-    const header = base64urlToJson<{ kid?: string; alg?: string }>(headerB64);
-    const payload = base64urlToJson<{
-      email?: string;
-      aud?: string | string[];
-      exp?: number;
-      iss?: string;
-    }>(payloadB64);
+    let header: { kid?: string; alg?: string };
+    let payload: { email?: string; aud?: string | string[]; exp?: number };
 
-    // Validar expiración antes de ir a buscar las claves
-    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    try {
+      header = decodeJwtPart(headerB64);
+    } catch (e) {
+      return { ok: false, error: `Header inválido: ${String(e)}` };
+    }
+
+    try {
+      payload = decodeJwtPart(payloadB64);
+    } catch (e) {
+      return { ok: false, error: `Payload inválido: ${String(e)}` };
+    }
+
+    // Validar expiración
+    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+      return { ok: false, error: `Token expirado (exp: ${payload.exp ?? 'undefined'})` };
+    }
 
     // Validar audience
-    const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!aud.includes(audience)) return null;
+    const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud ?? ''];
+    if (!aud.includes(audience)) {
+      return { ok: false, error: `Audience inválido. Token tiene: ${aud.join(',')} | Esperado: ${audience}` };
+    }
 
-    // Obtener JWKS del team domain
+    // Obtener JWKS
     const certsUrl = `https://${teamDomain}/cdn-cgi/access/certs`;
-    const certsRes = await fetch(certsUrl, { cf: { cacheTtl: 300 } } as RequestInit);
-    if (!certsRes.ok) return null;
+    let certsRes: Response;
+    try {
+      certsRes = await fetch(certsUrl);
+    } catch (e) {
+      return { ok: false, error: `No se pudo obtener JWKS: ${String(e)}` };
+    }
+
+    if (!certsRes.ok) {
+      return { ok: false, error: `JWKS endpoint retornó ${certsRes.status}` };
+    }
 
     const jwks = await certsRes.json<{ keys: Array<JsonWebKey & { kid?: string }> }>();
     const jwk = jwks.keys.find((k) => k.kid === header.kid);
-    if (!jwk) return null;
 
-    // Importar clave pública — CF Access usa ES256 (ECDSA con P-256)
-    const cryptoKey = await crypto.subtle.importKey(
-      'jwk',
-      jwk,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['verify']
-    );
+    if (!jwk) {
+      return {
+        ok: false,
+        error: `kid '${header.kid}' no encontrado en JWKS. Kids disponibles: ${jwks.keys.map((k) => k.kid).join(', ')}`,
+      };
+    }
 
-    // Verificar firma: el input es "header.payload" como bytes UTF-8
+    // Cloudflare Access usa ES256 (ECDSA P-256 + SHA-256)
+    // Si el alg es RS256, usar RSA en su lugar
+    let cryptoKey: CryptoKey;
+    const alg = header.alg ?? 'ES256';
+
+    try {
+      if (alg === 'RS256') {
+        cryptoKey = await crypto.subtle.importKey(
+          'jwk', jwk,
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+          false, ['verify']
+        );
+      } else {
+        // ES256 por defecto
+        cryptoKey = await crypto.subtle.importKey(
+          'jwk', jwk,
+          { name: 'ECDSA', namedCurve: 'P-256' },
+          false, ['verify']
+        );
+      }
+    } catch (e) {
+      return { ok: false, error: `Error importando clave (alg=${alg}): ${String(e)}` };
+    }
+
     const signingInput = `${headerB64}.${payloadB64}`;
-    const valid = await crypto.subtle.verify(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      cryptoKey,
-      base64urlToBytes(signatureB64),
-      new TextEncoder().encode(signingInput)
-    );
+    let valid: boolean;
 
-    if (!valid) return null;
+    try {
+      const verifyAlg = alg === 'RS256'
+        ? 'RSASSA-PKCS1-v1_5'
+        : { name: 'ECDSA', hash: 'SHA-256' };
 
-    return payload.email ?? null;
-  } catch {
-    return null;
+      valid = await crypto.subtle.verify(
+        verifyAlg,
+        cryptoKey,
+        base64urlToBytes(signatureB64),
+        new TextEncoder().encode(signingInput)
+      );
+    } catch (e) {
+      return { ok: false, error: `Error verificando firma: ${String(e)}` };
+    }
+
+    if (!valid) {
+      return { ok: false, error: 'Firma inválida' };
+    }
+
+    if (!payload.email) {
+      return { ok: false, error: 'Token no contiene email' };
+    }
+
+    return { ok: true, email: payload.email };
+  } catch (e) {
+    return { ok: false, error: `Error inesperado: ${String(e)}` };
   }
 }
