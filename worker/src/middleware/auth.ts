@@ -22,8 +22,14 @@ export async function authMiddleware(
     }
   }
 
-  // Cloudflare Access inyecta el JWT en este header cuando el usuario ya está autenticado
-  const jwt = c.req.header('Cf-Access-Jwt-Assertion');
+  // Buscar JWT en header primero, luego en cookie CF_Authorization
+  let jwt = c.req.header('Cf-Access-Jwt-Assertion');
+
+  if (!jwt) {
+    const cookieHeader = c.req.header('Cookie') ?? '';
+    const match = cookieHeader.match(/CF_Authorization=([^;]+)/);
+    jwt = match?.[1] ?? undefined;
+  }
 
   if (!jwt) {
     return c.json({
