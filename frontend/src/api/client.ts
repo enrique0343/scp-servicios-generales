@@ -118,11 +118,24 @@ class ApiError extends Error {
   }
 }
 
+// Lee el JWT de Cloudflare Access desde la cookie CF_Authorization
+function getCfAccessJwt(): string | null {
+  const match = document.cookie.match(/CF_Authorization=([^;]+)/);
+  return match?.[1] ?? null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const jwt = getCfAccessJwt();
+  const cfHeaders: Record<string, string> = jwt
+    ? { 'Cf-Access-Jwt-Assertion': jwt }
+    : {};
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...cfHeaders,
       ...(init?.headers ?? {}),
     },
   });
