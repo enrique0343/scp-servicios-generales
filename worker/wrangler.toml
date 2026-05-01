@@ -1,0 +1,17 @@
+name = "scp-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "scp-prod"
+database_id = "<asignado-por-cloudflare>"
+
+[vars]
+ENVIRONMENT = "production"
+ACCESS_AUD = "<audience-de-cloudflare-access>"
+ACCESS_TEAM_DOMAIN = "<team>.cloudflareaccess.com"
+
+[dev]
+port = 8787
+local_protocol = "http"

@@ -1,0 +1,24 @@
+{
+  "name": "@scp/worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "db:migrate:local": "wrangler d1 execute scp-prod --local --file=src/db/schema.sql",
+    "db:migrate:prod": "wrangler d1 execute scp-prod --file=src/db/schema.sql",
+    "db:seed:local": "wrangler d1 execute scp-prod --local --file=src/db/seed.sql",
+    "db:seed:prod": "wrangler d1 execute scp-prod --file=src/db/seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240725.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.65.1"
+  }
+}

@@ -1,0 +1,76 @@
+/* =============================================================
+   Tokens de diseño — Avante Complejo Hospitalario
+   Paleta institucional (GO-PRY-002-2026)
+   ============================================================= */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primario: #1a1a1a;
+  --color-secundario: #4a4a4a;
+  --color-bg: #ffffff;
+  --color-bg-alt: #f2f2f2;
+  --color-borde: #bfbfbf;
+  --color-success: #2d7a3e;
+  --color-warning: #b8860b;
+  --color-danger: #a02020;
+  --font-family: 'Century Gothic', 'Futura', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-bg);
+  color: var(--color-primario);
+  margin: 0;
+  padding: 0;
+}
+
+/* Tabla estándar institucional */
+.tabla-institucional thead tr {
+  background-color: var(--color-primario);
+  color: white;
+}
+
+.tabla-institucional tbody tr:nth-child(even) {
+  background-color: var(--color-bg-alt);
+}
+
+.tabla-institucional tbody tr:hover {
+  background-color: #e8e8e8;
+}
+
+/* Badge de estado */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-success {
+  background-color: #d1fae5;
+  color: var(--color-success);
+}
+
+.badge-warning {
+  background-color: #fef3c7;
+  color: var(--color-warning);
+}
+
+.badge-danger {
+  background-color: #fee2e2;
+  color: var(--color-danger);
+}
+
+.badge-neutral {
+  background-color: var(--color-bg-alt);
+  color: var(--color-secundario);
+}
