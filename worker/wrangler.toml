@@ -5,7 +5,7 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "scp-prod"
-database_id = "<asignado-por-cloudflare>"
+database_id = "30c9320e-32eb-424b-9c0e-e212f3c06e79"
 
 [vars]
 ENVIRONMENT = "production"
