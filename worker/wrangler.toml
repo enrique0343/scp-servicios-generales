@@ -9,8 +9,8 @@ database_id = "30c9320e-32eb-424b-9c0e-e212f3c06e79"
 
 [vars]
 ENVIRONMENT = "production"
-ACCESS_AUD = "<audience-de-cloudflare-access>"
-ACCESS_TEAM_DOMAIN = "<team>.cloudflareaccess.com"
+ACCESS_AUD = "7a387e83eaaefc3c802e0afaadd6eacb6703af43d717d13afae356127d899772"
+ACCESS_TEAM_DOMAIN = "avantescp.cloudflareaccess.com"
 
 [dev]
 port = 8787
