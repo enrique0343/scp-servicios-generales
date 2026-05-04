@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 
 export default function Login() {
-  const { step, error, submitEmail, submitOtp } = useAuth();
+  const { step, error, devCode, submitEmail, submitOtp } = useAuth();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (devCode) setCode(devCode);
+  }, [devCode]);
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,10 +61,17 @@ export default function Login() {
 
         {step === 'otp' && (
           <form onSubmit={handleOtp} className="space-y-4">
-            <p className="text-xs text-secundario text-center">
-              Ingresa el código de 6 dígitos enviado a<br />
-              <span className="font-medium text-primario">{email}</span>
-            </p>
+            {devCode ? (
+              <div className="bg-yellow-50 border border-yellow-300 rounded px-3 py-2 text-center">
+                <p className="text-xs text-yellow-700 font-medium">Modo sin email activo</p>
+                <p className="text-xs text-yellow-600 mt-0.5">Código auto-cargado — configura RESEND_API_KEY para producción</p>
+              </div>
+            ) : (
+              <p className="text-xs text-secundario text-center">
+                Ingresa el código de 6 dígitos enviado a<br />
+                <span className="font-medium text-primario">{email}</span>
+              </p>
+            )}
             <div>
               <input
                 type="text"

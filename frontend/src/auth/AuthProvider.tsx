@@ -8,6 +8,7 @@ interface AuthContextValue {
   isLoading: boolean;
   step: 'loading' | 'email' | 'otp' | 'authenticated';
   error: string | null;
+  devCode: string | null;
   submitEmail: (email: string) => Promise<void>;
   submitOtp: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -15,7 +16,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue>({
   user: null, rol: null, isLoading: true, step: 'loading',
-  error: null,
+  error: null, devCode: null,
   submitEmail: async () => undefined,
   submitOtp: async () => undefined,
   logout: async () => undefined,
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [step, setStep] = useState<'loading' | 'email' | 'otp' | 'authenticated'>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<AuthUser>('/auth/me')
@@ -47,8 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const submitEmail = useCallback(async (email: string) => {
     setError(null);
+    setDevCode(null);
     try {
-      await apiFetch('/auth/login', { method: 'POST', body: JSON.stringify({ email }) });
+      const res = await apiFetch<{ mensaje: string; dev_code?: string }>(
+        '/auth/login', { method: 'POST', body: JSON.stringify({ email }) }
+      );
+      if (res.dev_code) setDevCode(res.dev_code);
       setStep('otp');
     } catch (e) {
       setError((e as Error).message);
@@ -82,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user, rol: user?.rol ?? null,
       isLoading: step === 'loading',
-      step, error, submitEmail, submitOtp, logout,
+      step, error, devCode, submitEmail, submitOtp, logout,
     }}>
       {children}
     </AuthContext.Provider>

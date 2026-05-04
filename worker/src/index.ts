@@ -75,11 +75,11 @@ app.post('/api/v1/auth/login', async (c) => {
         html: `<p>Tu código de acceso es:</p><h2 style="font-size:32px;letter-spacing:8px;font-family:monospace">${code}</h2><p>Válido por 10 minutos.</p>`,
       }),
     });
-  } else {
-    console.log(`[DEV OTP] ${email}: ${code}`);
+    return c.json({ data: { mensaje: 'Si el email está registrado, recibirás un código' } });
   }
 
-  return c.json({ data: { mensaje: 'Si el email está registrado, recibirás un código' } });
+  // Sin RESEND_API_KEY: modo sin email — devuelve el código directamente para pruebas
+  return c.json({ data: { mensaje: 'Modo sin email activo', dev_code: code } });
 });
 
 app.post('/api/v1/auth/verify', async (c) => {
