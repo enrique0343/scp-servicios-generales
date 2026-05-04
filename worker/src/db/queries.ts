@@ -329,6 +329,13 @@ export async function getCoberturaVigente(db: D1Database): Promise<CoberturaEsta
 // Usuarios
 // =============================================================
 
+export async function getUsuarios(db: D1Database): Promise<Usuario[]> {
+  const result = await db
+    .prepare('SELECT * FROM usuario WHERE activo = 1 ORDER BY nombre')
+    .all<Usuario>();
+  return result.results;
+}
+
 export async function getUsuarioByEmail(
   db: D1Database,
   email: string

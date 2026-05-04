@@ -7,6 +7,7 @@ import Plantilla from './pages/Plantilla';
 import PlanMensual from './pages/PlanMensual';
 import SnapshotDiario from './pages/SnapshotDiario';
 import Excepciones from './pages/Excepciones';
+import Usuarios from './pages/Usuarios';
 
 export default function App() {
   const { step } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="plan/:yyyymm?" element={<PlanMensual />} />
         <Route path="asistencia/:fecha?" element={<SnapshotDiario />} />
         <Route path="excepciones" element={<Excepciones />} />
+        <Route path="usuarios" element={<Usuarios />} />
       </Route>
     </Routes>
   );

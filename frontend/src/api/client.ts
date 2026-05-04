@@ -93,6 +93,17 @@ export interface CoberturaEstandar {
   created_at: string;
 }
 
+export interface Usuario {
+  id: number;
+  email: string;
+  nombre: string;
+  rol: Rol;
+  persona_vinculada_id: number | null;
+  activo: 0 | 1;
+  ultimo_acceso: string | null;
+  created_at: string;
+}
+
 export interface KpiDashboard {
   cumplimiento_cobertura: number;
   tasa_ausentismo: number;
@@ -157,6 +168,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const authApi = {
   me: () => request<AuthUser>('/auth/me'),
+  listarUsuarios: () => request<Usuario[]>('/auth/users'),
   crearUsuario: (data: { email: string; nombre: string; rol: Rol; persona_vinculada_id?: number }) =>
     request<{ mensaje: string }>('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
   desactivarUsuario: (email: string) =>
