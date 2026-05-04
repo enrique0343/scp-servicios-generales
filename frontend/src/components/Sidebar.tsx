@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { to: '/plan', label: 'Plan Mensual', rolesPermitidos: ['admin', 'jefatura', 'supervisor', 'lectura'] },
   { to: '/asistencia', label: 'Asistencia Diaria', rolesPermitidos: ['admin', 'jefatura', 'supervisor'] },
   { to: '/excepciones', label: 'Excepciones', rolesPermitidos: ['admin', 'jefatura', 'supervisor'] },
+  { to: '/usuarios', label: 'Usuarios', rolesPermitidos: ['admin'] },
 ];
 
 export default function Sidebar() {

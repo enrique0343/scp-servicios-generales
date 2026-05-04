@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv, AuthUser } from '../types';
-import { getUsuarioByEmail, createUsuario } from '../db/queries';
+import { getUsuarios, getUsuarioByEmail, createUsuario } from '../db/queries';
 import { sessions } from '../middleware/auth';
 import { soloAdmin } from '../middleware/rbac';
 
@@ -121,6 +121,12 @@ auth.post('/logout', async (c) => {
   return c.json({ data: { mensaje: 'Sesión cerrada' } }, 200, {
     'Set-Cookie': 'scp_session=; Path=/; HttpOnly; Secure; Max-Age=0',
   });
+});
+
+// GET /auth/users — listar usuarios activos (solo admin)
+auth.get('/users', soloAdmin, async (c) => {
+  const usuarios = await getUsuarios(c.env.DB);
+  return c.json({ data: usuarios });
 });
 
 // POST /auth/users — crear usuario (solo admin)
