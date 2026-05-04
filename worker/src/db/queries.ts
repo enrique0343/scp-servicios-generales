@@ -186,6 +186,17 @@ export async function mestieneAsistencia(db: D1Database, yyyymm: string): Promis
 // Asistencia diaria
 // =============================================================
 
+export async function getAsistenciaByPersonaFecha(
+  db: D1Database,
+  persona_id: number,
+  fecha: string
+): Promise<AsistenciaDiaria | null> {
+  return db
+    .prepare('SELECT * FROM asistencia_diaria WHERE persona_id = ? AND fecha = ?')
+    .bind(persona_id, fecha)
+    .first<AsistenciaDiaria>();
+}
+
 export async function getAsistenciaByFecha(
   db: D1Database,
   fecha: string
