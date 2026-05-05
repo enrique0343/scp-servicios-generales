@@ -20,6 +20,7 @@ export default function Dashboard() {
   const { data: kpis, isLoading, error } = useQuery<KpiDashboard>({
     queryKey: ['dashboard-kpis', inicioMes, hoy],
     queryFn: () => dashboardApi.kpis(inicioMes, hoy),
+    retry: 1,
   });
 
   const { data: serieCobertura } = useQuery({
@@ -33,12 +34,17 @@ export default function Dashboard() {
   });
 
   if (isLoading) return <div className="text-secundario text-sm">Cargando indicadores...</div>;
-  if (error) return <div className="text-danger text-sm">Error al cargar el dashboard</div>;
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-primario">Dashboard Ejecutivo</h1>
       <p className="text-xs text-secundario">{inicioMes} al {hoy}</p>
+
+      {error && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded px-4 py-2 text-xs text-yellow-700">
+          No se pudieron cargar los KPIs — mostrando últimos valores disponibles. Los gráficos se actualizarán cuando haya registros de asistencia.
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
