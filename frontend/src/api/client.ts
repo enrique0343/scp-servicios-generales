@@ -167,8 +167,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (res.status === 401) {
-    // Cloudflare Access redirige automáticamente; forzamos recarga para disparar el flujo OTP
-    window.location.reload();
     throw new ApiError(401, 'UNAUTHORIZED', 'Sesión expirada');
   }
 
