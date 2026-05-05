@@ -130,18 +130,18 @@ asistencia.get('/:fecha/vista', todosLosRoles, async (c) => {
 
   const planRows = await c.env.DB.prepare(`
     SELECT pm.persona_id, pm.turno AS turno_planificado, pm.subarea_asignada,
-           p.nombre, p.subarea, p.codigo_empleado
+           p.nombre, p.subarea, p.codigo_empleado, p.area
     FROM plan_mensual pm
     JOIN persona p ON pm.persona_id = p.id
     WHERE pm.fecha = ? AND pm.turno != 'descanso'
     ORDER BY p.subarea, p.nombre
   `).bind(fecha).all<{
     persona_id: number; turno_planificado: string; subarea_asignada: string;
-    nombre: string; subarea: string; codigo_empleado: string;
+    nombre: string; subarea: string; codigo_empleado: string; area: string;
   }>();
 
   const asistenciaRows = await c.env.DB.prepare(`
-    SELECT ad.*, p.nombre, p.subarea, p.codigo_empleado
+    SELECT ad.*, p.nombre, p.subarea, p.codigo_empleado, p.area
     FROM asistencia_diaria ad
     JOIN persona p ON ad.persona_id = p.id
     WHERE ad.fecha = ?
@@ -156,6 +156,7 @@ asistencia.get('/:fecha/vista', todosLosRoles, async (c) => {
     codigo_empleado: plan.codigo_empleado,
     nombre: plan.nombre,
     subarea: plan.subarea,
+    area: plan.area,
     en_plan: true,
     turno_planificado: plan.turno_planificado,
     subarea_planificada: plan.subarea_asignada,
@@ -169,6 +170,7 @@ asistencia.get('/:fecha/vista', todosLosRoles, async (c) => {
       codigo_empleado: a['codigo_empleado'] as string,
       nombre: a['nombre'] as string,
       subarea: a['subarea'] as string,
+      area: a['area'] as string,
       en_plan: false,
       turno_planificado: null,
       subarea_planificada: null,

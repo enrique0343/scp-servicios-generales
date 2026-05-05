@@ -230,6 +230,8 @@ function ModalExcepcion({ linea, fecha, personas, onClose, onSave, saving, error
   );
 }
 
+function getSucursal(area: string) { return area.split(' - ')[0]; }
+
 // ——— Página principal ———
 export default function SnapshotDiario() {
   const { fecha } = useParams();
@@ -240,6 +242,7 @@ export default function SnapshotDiario() {
   const puedeEditar = useRequireRole(['admin', 'jefatura', 'supervisor']);
   const puedeCerrar = useRequireRole(['admin', 'jefatura']);
 
+  const [sucursalFiltro, setSucursalFiltro] = useState<string>('');
   const [modalPresencia, setModalPresencia] = useState<LineaVistaDiaria | null>(null);
   const [modalExcepcion, setModalExcepcion] = useState<LineaVistaDiaria | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
@@ -275,9 +278,17 @@ export default function SnapshotDiario() {
     onSuccess: invalidar,
   });
 
-  const lineas = vista?.lineas ?? [];
+  const todasLineas = vista?.lineas ?? [];
   const resumen = vista?.resumen;
-  const diaCerrado = lineas.length > 0 && lineas.every((l) => l.asistencia?.cerrado === 1);
+  const diaCerrado = todasLineas.length > 0 && todasLineas.every((l) => l.asistencia?.cerrado === 1);
+
+  // Sucursales únicas derivadas de los datos
+  const sucursales = [...new Set(todasLineas.map((l) => getSucursal(l.area ?? '')).filter((s): s is string => !!s))].sort();
+
+  // Filtro por sucursal
+  const lineas = sucursalFiltro
+    ? todasLineas.filter((l) => getSucursal(l.area ?? '') === sucursalFiltro)
+    : todasLineas;
 
   // Agrupar por subárea (planificados) + extras al final
   const subareasOrden: Subarea[] = ['limpieza', 'jardineria', 'lavanderia', 'apoyo_logistico', 'areas_comunes'];
@@ -300,6 +311,27 @@ export default function SnapshotDiario() {
           <Button variant="ghost" size="sm" onClick={() => navigate(`/asistencia/${navFecha(fechaActual, 1)}`)}>›</Button>
         </div>
       </div>
+
+      {/* Filtro por sucursal */}
+      {sucursales.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setSucursalFiltro('')}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${sucursalFiltro === '' ? 'bg-primario text-white border-primario' : 'border-borde text-secundario hover:border-primario hover:text-primario'}`}
+          >
+            Todas
+          </button>
+          {sucursales.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSucursalFiltro(s)}
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${sucursalFiltro === s ? 'bg-primario text-white border-primario' : 'border-borde text-secundario hover:border-primario hover:text-primario'}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* KPIs */}
       {resumen && (

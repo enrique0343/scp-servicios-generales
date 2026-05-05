@@ -109,6 +109,7 @@ export interface LineaVistaDiaria {
   codigo_empleado: string;
   nombre: string;
   subarea: Subarea;
+  area: string;
   en_plan: boolean;
   turno_planificado: string | null;
   subarea_planificada: Subarea | null;
