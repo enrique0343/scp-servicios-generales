@@ -20,10 +20,6 @@ export default function App() {
     );
   }
 
-  if (step === 'email' || step === 'otp') {
-    return <Login />;
-  }
-
   return (
     <Routes>
       <Route path="/" element={<Layout />}>

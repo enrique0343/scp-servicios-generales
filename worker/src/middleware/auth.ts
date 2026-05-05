@@ -4,23 +4,27 @@ import { getUsuarioByEmail, updateUltimoAcceso } from '../db/queries';
 
 type HonoVariables = { user: AuthUser };
 
-// Sesiones en memoria (se limpian al reiniciar el Worker — aceptable para V1)
-// Clave: token aleatorio, Valor: email del usuario
-const sessions = new Map<string, string>();
-
-export { sessions };
+export const sessions = new Map<string, string>();
 
 export async function authMiddleware(
   c: Context<{ Bindings: AppEnv; Variables: HonoVariables }>,
   next: Next
 ): Promise<Response | void> {
-  // Leer token de sesión desde cookie o header Authorization
   const cookieHeader = c.req.header('Cookie') ?? '';
   const cookieMatch = cookieHeader.match(/scp_session=([^;]+)/);
   const bearerMatch = (c.req.header('Authorization') ?? '').match(/^Bearer (.+)$/);
   const sessionToken = cookieMatch?.[1] ?? bearerMatch?.[1];
 
+  // Sin token: acceso abierto — usar primer admin activo
   if (!sessionToken) {
+    const defaultUser = await c.env.DB
+      .prepare(`SELECT * FROM usuario WHERE activo = 1 AND rol = 'admin' ORDER BY id LIMIT 1`)
+      .first<{ email: string; rol: string }>();
+    if (defaultUser) {
+      c.set('user', { email: defaultUser.email, rol: defaultUser.rol as AuthUser['rol'] });
+      await next();
+      return;
+    }
     return c.json({ error: { code: 'MISSING_TOKEN', message: 'Sesión requerida' } }, 401);
   }
 
@@ -36,6 +40,5 @@ export async function authMiddleware(
 
   c.set('user', { email: usuario.email, rol: usuario.rol });
   c.executionCtx.waitUntil(updateUltimoAcceso(c.env.DB, email));
-
   await next();
 }

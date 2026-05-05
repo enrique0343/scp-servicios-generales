@@ -121,4 +121,76 @@ asistencia.post('/:fecha/cerrar', adminOJefatura, async (c) => {
   return c.json({ data: { mensaje: `Día ${fecha} cerrado` } });
 });
 
+// GET /asistencia/:fecha/vista — plan + asistencia merged con nombres
+asistencia.get('/:fecha/vista', todosLosRoles, async (c) => {
+  const fecha = c.req.param('fecha');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Formato: YYYY-MM-DD' } }, 400);
+  }
+
+  const planRows = await c.env.DB.prepare(`
+    SELECT pm.persona_id, pm.turno AS turno_planificado, pm.subarea_asignada,
+           p.nombre, p.subarea, p.codigo_empleado
+    FROM plan_mensual pm
+    JOIN persona p ON pm.persona_id = p.id
+    WHERE pm.fecha = ? AND pm.turno != 'descanso'
+    ORDER BY p.subarea, p.nombre
+  `).bind(fecha).all<{
+    persona_id: number; turno_planificado: string; subarea_asignada: string;
+    nombre: string; subarea: string; codigo_empleado: string;
+  }>();
+
+  const asistenciaRows = await c.env.DB.prepare(`
+    SELECT ad.*, p.nombre, p.subarea, p.codigo_empleado
+    FROM asistencia_diaria ad
+    JOIN persona p ON ad.persona_id = p.id
+    WHERE ad.fecha = ?
+    ORDER BY p.subarea, p.nombre
+  `).bind(fecha).all<Record<string, unknown>>();
+
+  const asistenciaMap = new Map(asistenciaRows.results.map((a) => [a['persona_id'] as number, a]));
+  const planSet = new Set(planRows.results.map((p) => p.persona_id));
+
+  const lineasPlan = planRows.results.map((plan) => ({
+    persona_id: plan.persona_id,
+    codigo_empleado: plan.codigo_empleado,
+    nombre: plan.nombre,
+    subarea: plan.subarea,
+    en_plan: true,
+    turno_planificado: plan.turno_planificado,
+    subarea_planificada: plan.subarea_asignada,
+    asistencia: asistenciaMap.get(plan.persona_id) ?? null,
+  }));
+
+  const lineasExtra = asistenciaRows.results
+    .filter((a) => !planSet.has(a['persona_id'] as number))
+    .map((a) => ({
+      persona_id: a['persona_id'] as number,
+      codigo_empleado: a['codigo_empleado'] as string,
+      nombre: a['nombre'] as string,
+      subarea: a['subarea'] as string,
+      en_plan: false,
+      turno_planificado: null,
+      subarea_planificada: null,
+      asistencia: a,
+    }));
+
+  const lineas = [...lineasPlan, ...lineasExtra];
+  const ausenciaEstados = ['ausente_justificado', 'ausente_injustificado', 'incapacidad', 'permiso', 'vacaciones'];
+
+  return c.json({
+    data: {
+      fecha,
+      lineas,
+      resumen: {
+        planificados: lineasPlan.length,
+        presentes: lineas.filter((l) => l.asistencia && ['presente', 'doble_turno', 'sustitucion'].includes(l.asistencia['estado'] as string)).length,
+        ausentes: lineas.filter((l) => l.asistencia && ausenciaEstados.includes(l.asistencia['estado'] as string)).length,
+        sin_registro: lineasPlan.filter((l) => !l.asistencia).length,
+        horas_totales: lineas.reduce((s, l) => s + ((l.asistencia?.['horas_trabajadas'] as number) ?? 0), 0),
+      },
+    },
+  });
+});
+
 export default asistencia;

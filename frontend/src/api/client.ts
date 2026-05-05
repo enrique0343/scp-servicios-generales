@@ -104,6 +104,29 @@ export interface Usuario {
   created_at: string;
 }
 
+export interface LineaVistaDiaria {
+  persona_id: number;
+  codigo_empleado: string;
+  nombre: string;
+  subarea: Subarea;
+  en_plan: boolean;
+  turno_planificado: string | null;
+  subarea_planificada: Subarea | null;
+  asistencia: AsistenciaDiaria | null;
+}
+
+export interface VistaDiaria {
+  fecha: string;
+  lineas: LineaVistaDiaria[];
+  resumen: {
+    planificados: number;
+    presentes: number;
+    ausentes: number;
+    sin_registro: number;
+    horas_totales: number;
+  };
+}
+
 export interface KpiDashboard {
   cumplimiento_cobertura: number;
   tasa_ausentismo: number;
@@ -223,6 +246,7 @@ export const planApi = {
 
 export const asistenciaApi = {
   obtener: (fecha: string) => request<AsistenciaDiaria[]>(`/asistencia/${fecha}`),
+  vista: (fecha: string) => request<VistaDiaria>(`/asistencia/${fecha}/vista`),
   registrar: (fecha: string, data: Partial<AsistenciaDiaria>) =>
     request<{ mensaje: string }>(`/asistencia/${fecha}`, { method: 'POST', body: JSON.stringify(data) }),
   cerrarDia: (fecha: string) =>

@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     apiFetch<AuthUser>('/auth/me')
       .then((u) => { setUser(u); setStep('authenticated'); })
-      .catch(() => setStep('email'));
+      .catch(() => setStep('authenticated')); // acceso abierto: sin login
   }, []);
 
   const submitEmail = useCallback(async (email: string) => {
