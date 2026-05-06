@@ -35,6 +35,32 @@ function getSucursal(area: string): string {
   return area.split(' - ')[0] ?? area;
 }
 
+// Parse "HH:MM" → minutes from midnight
+function toMin(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+// Minutes of overlap between segment [a,b] and the diurnal window [360, 1140] (06:00–19:00)
+function overlapDiurnal(a: number, b: number): number {
+  return Math.max(0, Math.min(b, 1140) - Math.max(a, 360));
+}
+
+// Returns { diurnas, nocturnas } hours for a TurnoConfig
+function calcDiurnasNocturnas(t: TurnoConfig): { diurnas: number; nocturnas: number } {
+  const ini = toMin(t.hora_inicio);
+  const fin = toMin(t.hora_fin);
+  const diurnasMin = t.cruza_medianoche
+    ? overlapDiurnal(ini, 1440) + overlapDiurnal(0, fin)
+    : overlapDiurnal(ini, fin);
+  const diurnas = diurnasMin / 60;
+  return { diurnas, nocturnas: t.horas_duracion - diurnas };
+}
+
+function fmtH(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 type PlanCell = { turno: TurnoPlan; subarea_asignada: Subarea };
 type DraftPlan = Record<number, Record<string, PlanCell>>;
 
@@ -62,7 +88,6 @@ export default function PlanMensual() {
 
   const mesActual = yyyymm ?? new Date().toISOString().slice(0, 7);
   const { rol } = useAuth();
-  // Permite editar si el rol es admin/jefatura, o si aún no se resolvió el usuario (acceso abierto)
   const puedeEditar = rol === null || rol === 'admin' || rol === 'jefatura';
   const fechas = useMemo(() => diasDelMes(mesActual), [mesActual]);
 
@@ -86,10 +111,16 @@ export default function PlanMensual() {
     queryFn: turnosApi.listar,
   });
 
-  // Ciclo de turnos: activos en orden + descanso al final
   const cicloTurnos = useMemo<string[]>(() => {
     const activos = (turnosConfig ?? []).filter(t => t.activo).map(t => t.codigo);
     return activos.length > 0 ? [...activos, 'descanso'] : ['D', 'N', 'descanso'];
+  }, [turnosConfig]);
+
+  // Map turno code → TurnoConfig for fast lookup
+  const turnoMap = useMemo(() => {
+    const m = new Map<string, TurnoConfig>();
+    (turnosConfig ?? []).forEach(t => m.set(t.codigo, t));
+    return m;
   }, [turnosConfig]);
 
   const [draft, setDraft] = useState<DraftPlan | null>(null);
@@ -108,7 +139,6 @@ export default function PlanMensual() {
     return m;
   }, [plazas]);
 
-  // Server plan indexed as [persona_id][fecha]
   const serverPlanMap = useMemo(() => {
     const m: DraftPlan = {};
     (plan ?? []).forEach((l) => {
@@ -118,7 +148,6 @@ export default function PlanMensual() {
     return m;
   }, [plan]);
 
-  // Effective plan: server + draft overrides
   const effectivePlan = useMemo((): DraftPlan => {
     if (!draft) return serverPlanMap;
     const merged: DraftPlan = {};
@@ -153,12 +182,31 @@ export default function PlanMensual() {
     return [...set].sort();
   }, [personasConPlaza]);
 
+  // Monthly hours per collaborator: total, diurnas, nocturnas
+  const resumenHoras = useMemo(() => {
+    const result: Record<number, { total: number; diurnas: number; nocturnas: number }> = {};
+    for (const pid of personaIdsMostrados) {
+      let total = 0, diurnas = 0, nocturnas = 0;
+      for (const fecha of fechas) {
+        const codigo = effectivePlan[pid]?.[fecha]?.turno;
+        if (!codigo || codigo === 'descanso') continue;
+        const tc = turnoMap.get(codigo);
+        if (!tc) continue;
+        total += tc.horas_duracion;
+        const { diurnas: d, nocturnas: n } = calcDiurnasNocturnas(tc);
+        diurnas += d;
+        nocturnas += n;
+      }
+      result[pid] = { total, diurnas, nocturnas };
+    }
+    return result;
+  }, [personaIdsMostrados, effectivePlan, fechas, turnoMap]);
+
   const estadoPlan = plan && plan.length > 0 ? plan[0]?.estado_plan : null;
   const estaAprobado = estadoPlan === 'aprobado';
   const hayPlan = plan && plan.length > 0;
   const hayDraft = draft !== null && Object.keys(draft).length > 0;
 
-  // Builds all lines from effective plan (personas × fechas)
   function buildLineas() {
     return personasConPlaza.flatMap((persona) => {
       const plaza = plazaByPersona.get(persona.id)!;
@@ -223,6 +271,16 @@ export default function PlanMensual() {
     setErrorMsg(null);
   }
 
+  // Turno detail tooltip
+  function turnoTitle(codigo: string): string {
+    if (codigo === 'descanso') return 'Descanso';
+    const tc = turnoMap.get(codigo);
+    if (!tc) return codigo;
+    return `${tc.nombre} · ${tc.hora_inicio}–${tc.hora_fin} (${tc.horas_duracion}h)`;
+  }
+
+  const turnosActivos = (turnosConfig ?? []).filter(t => t.activo);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -279,6 +337,32 @@ export default function PlanMensual() {
         </div>
       )}
 
+      {/* Leyenda de turnos */}
+      {turnosActivos.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center border border-borde rounded px-3 py-2 bg-gray-50">
+          <span className="text-xs text-secundario font-medium mr-1">Turnos:</span>
+          {turnosActivos.map(t => {
+            const { diurnas, nocturnas } = calcDiurnasNocturnas(t);
+            return (
+              <span
+                key={t.codigo}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${turnoCls(t.codigo)}`}
+                title={`${t.nombre}\n${t.hora_inicio}–${t.hora_fin} · ${t.horas_duracion}h total\nDiurnas: ${fmtH(diurnas)}h · Nocturnas: ${fmtH(nocturnas)}h`}
+              >
+                {t.codigo}
+                <span className="font-normal opacity-80 hidden sm:inline">{t.hora_inicio}–{t.hora_fin} · {t.horas_duracion}h</span>
+              </span>
+            );
+          })}
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${turnoCls('descanso')}`}>
+            — <span className="font-normal opacity-80 hidden sm:inline">descanso</span>
+          </span>
+          <span className="text-xs text-secundario ml-2 hidden md:inline">
+            · Diurnas: 06:00–19:00 · Nocturnas: 19:00–06:00
+          </span>
+        </div>
+      )}
+
       {planLoading && <div className="text-secundario text-sm">Cargando plan...</div>}
 
       {/* Sin plan */}
@@ -331,7 +415,7 @@ export default function PlanMensual() {
         <>
           {!estaAprobado && puedeEditar && (
             <p className="text-xs text-secundario">
-              Haz clic en un turno para cambiarlo: <strong>D</strong> → <strong>N</strong> → <strong>—</strong> (descanso)
+              Haz clic en un turno para cambiarlo. Las horas del mes se actualizan automáticamente.
             </p>
           )}
           <div className="overflow-x-auto border border-borde rounded">
@@ -345,6 +429,10 @@ export default function PlanMensual() {
                       {f.slice(8)}
                     </th>
                   ))}
+                  {/* Summary columns */}
+                  <th className="px-2 py-2 text-right bg-primario min-w-[38px] border-l border-white/20" title="Total horas en el mes">Hs</th>
+                  <th className="px-2 py-2 text-right bg-blue-700 min-w-[38px]" title="Horas diurnas (06:00–19:00)">Diur</th>
+                  <th className="px-2 py-2 text-right bg-indigo-800 min-w-[38px]" title="Horas nocturnas (19:00–06:00)">Noc</th>
                 </tr>
               </thead>
               <tbody>
@@ -352,6 +440,7 @@ export default function PlanMensual() {
                   const persona = personaMap.get(pid);
                   const nombre = persona?.nombre ?? `ID ${pid}`;
                   const subarea = (persona?.subarea ?? '').replace(/_/g, ' ');
+                  const res = resumenHoras[pid] ?? { total: 0, diurnas: 0, nocturnas: 0 };
                   return (
                     <tr key={pid}>
                       <td className="px-3 py-1.5 sticky left-0 bg-white font-medium whitespace-nowrap border-r border-borde">
@@ -373,13 +462,23 @@ export default function PlanMensual() {
                                 isEdited ? 'ring-1 ring-offset-1 ring-yellow-400' : ''
                               }`}
                               onClick={() => toggleTurno(pid, f)}
-                              title={!estaAprobado && puedeEditar ? 'Clic para cambiar turno' : undefined}
+                              title={turno ? turnoTitle(turno) : undefined}
                             >
                               {turno ? turnoLabel(turno) : '·'}
                             </span>
                           </td>
                         );
                       })}
+                      {/* Hours summary */}
+                      <td className="px-2 py-1.5 text-right font-semibold tabular-nums border-l border-borde">
+                        {fmtH(res.total)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-blue-700 tabular-nums">
+                        {fmtH(res.diurnas)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-indigo-700 tabular-nums">
+                        {fmtH(res.nocturnas)}
+                      </td>
                     </tr>
                   );
                 })}
