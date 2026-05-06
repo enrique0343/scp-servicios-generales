@@ -6,7 +6,7 @@ import {
   type PlanMensual as PlanMensualType,
   type Persona, type Plaza, type TurnoPlan, type Subarea,
 } from '../api/client';
-import { useRequireRole } from '../auth/AuthProvider';
+import { useAuth } from '../auth/AuthProvider';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 
@@ -52,7 +52,9 @@ export default function PlanMensual() {
   const qc = useQueryClient();
 
   const mesActual = yyyymm ?? new Date().toISOString().slice(0, 7);
-  const puedeEditar = useRequireRole(['admin', 'jefatura']);
+  const { rol } = useAuth();
+  // Permite editar si el rol es admin/jefatura, o si aún no se resolvió el usuario (acceso abierto)
+  const puedeEditar = rol === null || rol === 'admin' || rol === 'jefatura';
   const fechas = useMemo(() => diasDelMes(mesActual), [mesActual]);
 
   const { data: plan, isLoading: planLoading } = useQuery<PlanMensualType[]>({
