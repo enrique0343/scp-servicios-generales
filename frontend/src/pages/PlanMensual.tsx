@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   planApi, personasApi, plazasApi, turnosApi,
@@ -136,8 +136,20 @@ export default function PlanMensual() {
   }, [turnosConfig]);
 
   const [draft, setDraft] = useState<DraftPlan | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved'>('idle');
   const [sucursalFiltro, setSucursalFiltro] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Refs for debounced auto-save
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  type Linea = { persona_id: number; fecha: string; turno: TurnoPlan; subarea_asignada: Subarea };
+  const buildLineasRef = useRef<() => Linea[]>(() => []);
+
+  useEffect(() => () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    if (autoSaveClearTimer.current) clearTimeout(autoSaveClearTimer.current);
+  }, []);
 
   const personaMap = useMemo(() => {
     const m = new Map<number, Persona>();
@@ -219,7 +231,7 @@ export default function PlanMensual() {
   const hayPlan = plan && plan.length > 0;
   const hayDraft = draft !== null && Object.keys(draft).length > 0;
 
-  function buildLineas() {
+  function buildLineas(): Linea[] {
     return personasConPlaza.flatMap((persona) => {
       const plaza = plazaByPersona.get(persona.id)!;
       return fechas.map((fecha) => {
@@ -233,16 +245,11 @@ export default function PlanMensual() {
       });
     });
   }
+  // Keep ref in sync so the timeout callback always uses the latest closure
+  buildLineasRef.current = buildLineas;
 
   const guardar = useMutation({
-    mutationFn: (lineas: ReturnType<typeof buildLineas>) =>
-      planApi.crear(mesActual, lineas),
-    onSuccess: () => {
-      setDraft(null);
-      setErrorMsg(null);
-      void qc.invalidateQueries({ queryKey: ['plan', mesActual] });
-    },
-    onError: (e: Error) => setErrorMsg(e.message),
+    mutationFn: (lineas: Linea[]) => planApi.crear(mesActual, lineas),
   });
 
   const aprobar = useMutation({
@@ -251,10 +258,39 @@ export default function PlanMensual() {
     onError: (e: Error) => setErrorMsg(e.message),
   });
 
+  function onSaveSuccess() {
+    setDraft(null);
+    setErrorMsg(null);
+    void qc.invalidateQueries({ queryKey: ['plan', mesActual] });
+  }
+
   function generarPlanBase() {
     if (!personas || !plazas) return;
-    setDraft(null);
-    guardar.mutate(buildLineas());
+    guardar.mutate(buildLineas(), {
+      onSuccess: onSaveSuccess,
+      onError: (e: Error) => setErrorMsg(e.message),
+    });
+  }
+
+  function scheduleAutoSave() {
+    if (estaAprobado) return;
+    setAutoSaveStatus('pending');
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      setAutoSaveStatus('saving');
+      guardar.mutate(buildLineasRef.current(), {
+        onSuccess: () => {
+          onSaveSuccess();
+          setAutoSaveStatus('saved');
+          if (autoSaveClearTimer.current) clearTimeout(autoSaveClearTimer.current);
+          autoSaveClearTimer.current = setTimeout(() => setAutoSaveStatus('idle'), 2500);
+        },
+        onError: (e: Error) => {
+          setErrorMsg(e.message);
+          setAutoSaveStatus('idle');
+        },
+      });
+    }, 1500);
   }
 
   function toggleTurno(personaId: number, fecha: string) {
@@ -272,13 +308,12 @@ export default function PlanMensual() {
         [fecha]: { turno: nextTurno, subarea_asignada: currentCell?.subarea_asignada ?? persona.subarea },
       },
     }));
-  }
-
-  function guardarCambios() {
-    guardar.mutate(buildLineas());
+    scheduleAutoSave();
   }
 
   function descartarCambios() {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setAutoSaveStatus('idle');
     setDraft(null);
     setErrorMsg(null);
   }
@@ -317,17 +352,37 @@ export default function PlanMensual() {
             variant={estaAprobado ? 'success' : 'warning'}
           />
         )}
-        {hayDraft && (
-          <>
-            <Button variant="primary" size="sm" onClick={guardarCambios} disabled={guardar.isPending}>
-              {guardar.isPending ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={descartarCambios} disabled={guardar.isPending}>
-              Descartar
-            </Button>
-          </>
+
+        {/* Auto-save status */}
+        {!estaAprobado && puedeEditar && autoSaveStatus === 'pending' && (
+          <span className="text-xs text-secundario flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block" />
+            Cambios sin guardar
+          </span>
         )}
-        {puedeEditar && !estaAprobado && hayPlan && !hayDraft && (
+        {!estaAprobado && puedeEditar && autoSaveStatus === 'saving' && (
+          <span className="text-xs text-secundario flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
+            Guardando...
+          </span>
+        )}
+        {!estaAprobado && puedeEditar && autoSaveStatus === 'saved' && (
+          <span className="text-xs text-green-600 flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Guardado
+          </span>
+        )}
+
+        {/* Descartar solo mientras hay cambios pendientes */}
+        {autoSaveStatus === 'pending' && (
+          <Button variant="ghost" size="sm" onClick={descartarCambios}>
+            Descartar
+          </Button>
+        )}
+
+        {puedeEditar && !estaAprobado && hayPlan && autoSaveStatus === 'idle' && (
           <Button
             variant="primary"
             size="sm"
