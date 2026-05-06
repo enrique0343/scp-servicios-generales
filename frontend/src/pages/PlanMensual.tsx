@@ -143,8 +143,10 @@ export default function PlanMensual() {
   // Refs for debounced auto-save
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoSaving = useRef(false);
   type Linea = { persona_id: number; fecha: string; turno: TurnoPlan; subarea_asignada: Subarea };
   const buildLineasRef = useRef<() => Linea[]>(() => []);
+  const mutateRef = useRef<(lineas: Linea[]) => void>(() => undefined);
 
   useEffect(() => () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -245,12 +247,31 @@ export default function PlanMensual() {
       });
     });
   }
-  // Keep ref in sync so the timeout callback always uses the latest closure
+  // Keep refs in sync every render so setTimeout callbacks always use latest values
   buildLineasRef.current = buildLineas;
 
   const guardar = useMutation({
     mutationFn: (lineas: Linea[]) => planApi.crear(mesActual, lineas),
+    onSuccess: () => {
+      setDraft(null);
+      setErrorMsg(null);
+      void qc.invalidateQueries({ queryKey: ['plan', mesActual] });
+      if (isAutoSaving.current) {
+        isAutoSaving.current = false;
+        setAutoSaveStatus('saved');
+        if (autoSaveClearTimer.current) clearTimeout(autoSaveClearTimer.current);
+        autoSaveClearTimer.current = setTimeout(() => setAutoSaveStatus('idle'), 2500);
+      }
+    },
+    onError: (e: Error) => {
+      setErrorMsg(e.message);
+      if (isAutoSaving.current) {
+        isAutoSaving.current = false;
+        setAutoSaveStatus('idle');
+      }
+    },
   });
+  mutateRef.current = guardar.mutate;
 
   const aprobar = useMutation({
     mutationFn: () => planApi.aprobar(mesActual),
@@ -258,18 +279,9 @@ export default function PlanMensual() {
     onError: (e: Error) => setErrorMsg(e.message),
   });
 
-  function onSaveSuccess() {
-    setDraft(null);
-    setErrorMsg(null);
-    void qc.invalidateQueries({ queryKey: ['plan', mesActual] });
-  }
-
   function generarPlanBase() {
     if (!personas || !plazas) return;
-    guardar.mutate(buildLineas(), {
-      onSuccess: onSaveSuccess,
-      onError: (e: Error) => setErrorMsg(e.message),
-    });
+    mutateRef.current(buildLineas());
   }
 
   function scheduleAutoSave() {
@@ -278,18 +290,8 @@ export default function PlanMensual() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       setAutoSaveStatus('saving');
-      guardar.mutate(buildLineasRef.current(), {
-        onSuccess: () => {
-          onSaveSuccess();
-          setAutoSaveStatus('saved');
-          if (autoSaveClearTimer.current) clearTimeout(autoSaveClearTimer.current);
-          autoSaveClearTimer.current = setTimeout(() => setAutoSaveStatus('idle'), 2500);
-        },
-        onError: (e: Error) => {
-          setErrorMsg(e.message);
-          setAutoSaveStatus('idle');
-        },
-      });
+      isAutoSaving.current = true;
+      mutateRef.current(buildLineasRef.current());
     }, 1500);
   }
 
