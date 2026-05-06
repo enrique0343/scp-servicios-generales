@@ -434,7 +434,9 @@ export default function PlanMensual() {
             <table className="text-xs tabla-institucional min-w-full">
               <thead>
                 <tr>
-                  <th className="px-3 py-2 text-left sticky left-0 bg-primario min-w-[160px]">Colaborador</th>
+                  <th className="px-3 py-2 text-left sticky left-0 bg-primario min-w-[160px]">
+                  <span className="text-white/40 text-[10px] mr-1.5">#</span>Colaborador
+                </th>
                   <th className="px-2 py-2 text-left bg-primario min-w-[90px]">Subárea</th>
                   {fechas.map((f) => (
                     <th
@@ -452,7 +454,7 @@ export default function PlanMensual() {
                 </tr>
               </thead>
               <tbody>
-                {personaIdsMostrados.map((pid) => {
+                {personaIdsMostrados.map((pid, idx) => {
                   const persona = personaMap.get(pid);
                   const nombre = persona?.nombre ?? `ID ${pid}`;
                   const subarea = (persona?.subarea ?? '').replace(/_/g, ' ');
@@ -460,7 +462,7 @@ export default function PlanMensual() {
                   return (
                     <tr key={pid}>
                       <td className="px-3 py-1.5 sticky left-0 bg-white font-medium whitespace-nowrap border-r border-borde">
-                        {nombre}
+                        <span className="text-secundario/40 text-[10px] mr-1.5 tabular-nums">{idx + 1}</span>{nombre}
                       </td>
                       <td className="px-2 py-1.5 text-secundario capitalize whitespace-nowrap">
                         {subarea}
