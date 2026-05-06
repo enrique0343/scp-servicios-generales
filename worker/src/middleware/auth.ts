@@ -15,31 +15,29 @@ export async function authMiddleware(
   const bearerMatch = (c.req.header('Authorization') ?? '').match(/^Bearer (.+)$/);
   const sessionToken = cookieMatch?.[1] ?? bearerMatch?.[1];
 
-  // Sin token: acceso abierto — usar primer admin activo
-  if (!sessionToken) {
-    const defaultUser = await c.env.DB
-      .prepare(`SELECT * FROM usuario WHERE activo = 1 AND rol = 'admin' ORDER BY id LIMIT 1`)
+  // Resuelve el admin de bypass: DB o fallback hardcoded
+  async function adminBypass(): Promise<{ email: string; rol: string }> {
+    const dbUser = await c.env.DB
+      .prepare(`SELECT email, rol FROM usuario WHERE activo = 1 AND rol = 'admin' ORDER BY id LIMIT 1`)
       .first<{ email: string; rol: string }>();
-    if (defaultUser) {
-      c.set('user', { email: defaultUser.email, rol: defaultUser.rol as AuthUser['rol'] });
-      await next();
-      return;
-    }
-    return c.json({ error: { code: 'MISSING_TOKEN', message: 'Sesión requerida' } }, 401);
+    return dbUser ?? { email: 'admin@sistema', rol: 'admin' };
+  }
+
+  // Sin token: acceso abierto
+  if (!sessionToken) {
+    const u = await adminBypass();
+    c.set('user', { email: u.email, rol: u.rol as AuthUser['rol'] });
+    await next();
+    return;
   }
 
   const email = sessions.get(sessionToken);
   if (!email) {
-    // Token no reconocido (sesión expirada o Worker reiniciado) — usar bypass admin
-    const defaultUser = await c.env.DB
-      .prepare(`SELECT * FROM usuario WHERE activo = 1 AND rol = 'admin' ORDER BY id LIMIT 1`)
-      .first<{ email: string; rol: string }>();
-    if (defaultUser) {
-      c.set('user', { email: defaultUser.email, rol: defaultUser.rol as AuthUser['rol'] });
-      await next();
-      return;
-    }
-    return c.json({ error: { code: 'INVALID_TOKEN', message: 'Sesión inválida o expirada' } }, 401);
+    // Token no reconocido (sesión expirada o Worker reiniciado)
+    const u = await adminBypass();
+    c.set('user', { email: u.email, rol: u.rol as AuthUser['rol'] });
+    await next();
+    return;
   }
 
   const usuario = await getUsuarioByEmail(c.env.DB, email);
