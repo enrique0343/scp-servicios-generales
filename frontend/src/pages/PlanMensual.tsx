@@ -35,6 +35,18 @@ function getSucursal(area: string): string {
   return area.split(' - ')[0] ?? area;
 }
 
+// L M X J V S D — X for Wednesday to avoid clash with Martes
+const DIA_SEMANA = ['D', 'L', 'M', 'X', 'J', 'V', 'S'] as const;
+
+function diaSemana(fecha: string): string {
+  return DIA_SEMANA[new Date(fecha + 'T12:00:00').getDay()] ?? '';
+}
+
+function esFinDeSemana(fecha: string): boolean {
+  const d = new Date(fecha + 'T12:00:00').getDay();
+  return d === 0 || d === 6;
+}
+
 // Parse "HH:MM" → minutes from midnight
 function toMin(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
@@ -425,8 +437,12 @@ export default function PlanMensual() {
                   <th className="px-3 py-2 text-left sticky left-0 bg-primario min-w-[160px]">Colaborador</th>
                   <th className="px-2 py-2 text-left bg-primario min-w-[90px]">Subárea</th>
                   {fechas.map((f) => (
-                    <th key={f} className="px-1 py-2 text-center min-w-[26px] font-normal">
-                      {f.slice(8)}
+                    <th
+                      key={f}
+                      className={`px-1 py-1 text-center min-w-[26px] font-normal leading-tight ${esFinDeSemana(f) ? 'bg-white/10' : ''}`}
+                    >
+                      <div className="text-[9px] opacity-60">{diaSemana(f)}</div>
+                      <div>{f.slice(8)}</div>
                     </th>
                   ))}
                   {/* Summary columns */}
@@ -454,7 +470,7 @@ export default function PlanMensual() {
                         const turno = cell?.turno;
                         const isEdited = draft?.[pid]?.[f] !== undefined;
                         return (
-                          <td key={f} className="px-0.5 py-1 text-center">
+                          <td key={f} className={`px-0.5 py-1 text-center ${esFinDeSemana(f) ? 'bg-gray-50' : ''}`}>
                             <span
                               className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-semibold select-none ${
                                 turno ? turnoCls(turno) : 'text-gray-200'
