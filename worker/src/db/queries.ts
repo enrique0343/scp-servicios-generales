@@ -8,7 +8,37 @@ import type {
   Usuario,
   Auditoria,
   AccionAuditoria,
+  TurnoConfig,
 } from '../types';
+
+// =============================================================
+// Turno Config
+// =============================================================
+
+export async function getTurnosConfig(db: D1Database): Promise<TurnoConfig[]> {
+  const result = await db.prepare('SELECT * FROM turno_config ORDER BY codigo').all<TurnoConfig>();
+  return result.results;
+}
+
+export async function upsertTurnoConfig(
+  db: D1Database,
+  data: Omit<TurnoConfig, 'created_at'>
+): Promise<D1Result> {
+  return db
+    .prepare(
+      `INSERT INTO turno_config (codigo, nombre, hora_inicio, hora_fin, horas_duracion, cruza_medianoche, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(codigo) DO UPDATE SET
+         nombre = excluded.nombre,
+         hora_inicio = excluded.hora_inicio,
+         hora_fin = excluded.hora_fin,
+         horas_duracion = excluded.horas_duracion,
+         cruza_medianoche = excluded.cruza_medianoche,
+         activo = excluded.activo`
+    )
+    .bind(data.codigo, data.nombre, data.hora_inicio, data.hora_fin, data.horas_duracion, data.cruza_medianoche, data.activo)
+    .run();
+}
 
 // =============================================================
 // Plazas

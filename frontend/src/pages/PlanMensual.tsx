@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  planApi, personasApi, plazasApi,
+  planApi, personasApi, plazasApi, turnosApi,
   type PlanMensual as PlanMensualType,
-  type Persona, type Plaza, type TurnoPlan, type Subarea,
+  type Persona, type Plaza, type TurnoPlan, type Subarea, type TurnoConfig,
 } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Badge } from '../components/ui/Badge';
@@ -38,13 +38,22 @@ function getSucursal(area: string): string {
 type PlanCell = { turno: TurnoPlan; subarea_asignada: Subarea };
 type DraftPlan = Record<number, Record<string, PlanCell>>;
 
-const CICLO_TURNO: Record<TurnoPlan, TurnoPlan> = { D: 'N', N: 'descanso', descanso: 'D' };
-const TURNO_LABEL: Record<TurnoPlan, string> = { D: 'D', N: 'N', descanso: '—' };
-const TURNO_CLS: Record<TurnoPlan, string> = {
+const TURNO_CLS_BASE: Record<string, string> = {
   D: 'bg-blue-100 text-blue-700',
   N: 'bg-gray-800 text-white',
+  '8A': 'bg-green-100 text-green-700',
+  '8B': 'bg-orange-100 text-orange-700',
+  '24': 'bg-purple-100 text-purple-700',
   descanso: 'bg-gray-100 text-gray-400',
 };
+
+function turnoLabel(codigo: string): string {
+  return codigo === 'descanso' ? '—' : codigo;
+}
+
+function turnoCls(codigo: string): string {
+  return TURNO_CLS_BASE[codigo] ?? 'bg-yellow-100 text-yellow-700';
+}
 
 export default function PlanMensual() {
   const { yyyymm } = useParams();
@@ -71,6 +80,17 @@ export default function PlanMensual() {
     queryKey: ['plazas'],
     queryFn: plazasApi.listar,
   });
+
+  const { data: turnosConfig } = useQuery<TurnoConfig[]>({
+    queryKey: ['turnos'],
+    queryFn: turnosApi.listar,
+  });
+
+  // Ciclo de turnos: activos en orden + descanso al final
+  const cicloTurnos = useMemo<string[]>(() => {
+    const activos = (turnosConfig ?? []).filter(t => t.activo).map(t => t.codigo);
+    return activos.length > 0 ? [...activos, 'descanso'] : ['D', 'N', 'descanso'];
+  }, [turnosConfig]);
 
   const [draft, setDraft] = useState<DraftPlan | null>(null);
   const [sucursalFiltro, setSucursalFiltro] = useState<string | null>(null);
@@ -183,7 +203,8 @@ export default function PlanMensual() {
     if (!persona) return;
     const currentCell = effectivePlan[personaId]?.[fecha];
     const currentTurno = currentCell?.turno ?? (plazaByPersona.get(personaId)?.turno_base as TurnoPlan | undefined) ?? 'D';
-    const nextTurno = CICLO_TURNO[currentTurno];
+    const idx = cicloTurnos.indexOf(currentTurno);
+    const nextTurno = cicloTurnos[(idx + 1) % cicloTurnos.length] ?? 'descanso';
     setDraft((prev) => ({
       ...(prev ?? {}),
       [personaId]: {
@@ -347,14 +368,14 @@ export default function PlanMensual() {
                           <td key={f} className="px-0.5 py-1 text-center">
                             <span
                               className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-semibold select-none ${
-                                turno ? TURNO_CLS[turno] : 'text-gray-200'
+                                turno ? turnoCls(turno) : 'text-gray-200'
                               } ${!estaAprobado && puedeEditar ? 'cursor-pointer hover:opacity-70' : ''} ${
                                 isEdited ? 'ring-1 ring-offset-1 ring-yellow-400' : ''
                               }`}
                               onClick={() => toggleTurno(pid, f)}
                               title={!estaAprobado && puedeEditar ? 'Clic para cambiar turno' : undefined}
                             >
-                              {turno ? TURNO_LABEL[turno] : '·'}
+                              {turno ? turnoLabel(turno) : '·'}
                             </span>
                           </td>
                         );

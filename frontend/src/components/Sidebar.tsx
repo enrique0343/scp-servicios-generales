@@ -15,6 +15,7 @@ const navItems: NavItem[] = [
   { to: '/asistencia', label: 'Asistencia Diaria', rolesPermitidos: ['admin', 'jefatura', 'supervisor'] },
   { to: '/excepciones', label: 'Excepciones', rolesPermitidos: ['admin', 'jefatura', 'supervisor'] },
   { to: '/usuarios', label: 'Usuarios', rolesPermitidos: ['admin'] },
+  { to: '/turnos', label: 'Turnos', rolesPermitidos: ['admin', 'jefatura'] },
 ];
 
 interface SidebarProps {

@@ -13,6 +13,7 @@ import coberturaRoutes from './routes/cobertura';
 import dashboardRoutes from './routes/dashboard';
 import auditoriaRoutes from './routes/auditoria';
 import authRoutes from './routes/auth';
+import turnosRoutes from './routes/turnos';
 
 type Variables = { user: AuthUser };
 
@@ -115,6 +116,7 @@ app.use('/api/v1/*', authMiddleware);
 // =============================================================
 const v1 = new Hono<{ Bindings: AppEnv; Variables: Variables }>();
 v1.route('/auth', authRoutes);
+v1.route('/turnos', turnosRoutes);
 v1.route('/personas', plantillaRoutes);
 v1.route('/plazas', plazasRoutes);
 v1.route('/plan', planRoutes);

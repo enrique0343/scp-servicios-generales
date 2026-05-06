@@ -3,8 +3,19 @@
 
 export type Rol = 'admin' | 'jefatura' | 'supervisor' | 'lectura';
 export type Subarea = 'limpieza' | 'jardineria' | 'lavanderia' | 'apoyo_logistico' | 'areas_comunes';
-export type TurnoPlan = 'D' | 'N' | 'descanso';
+export type TurnoPlan = string; // código de turno (D, N, 8A, 8B, 24, descanso, ...)
 export type EstadoPlaza = 'autorizada' | 'contratada' | 'vacante';
+
+export interface TurnoConfig {
+  codigo: string;
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  horas_duracion: number;
+  cruza_medianoche: 0 | 1;
+  activo: 0 | 1;
+  created_at: string;
+}
 export type EstadoPersona = 'activo' | 'inactivo' | 'suspendido';
 
 export interface AuthUser {
@@ -310,6 +321,19 @@ export const dashboardApi = {
     return request<unknown[]>(`/dashboard/he-clasificada?${params.toString()}`);
   },
   export: (desde: string, hasta: string) => request<unknown[]>(`/dashboard/export?desde=${desde}&hasta=${hasta}`),
+};
+
+// =============================================================
+// Turnos
+// =============================================================
+
+export const turnosApi = {
+  listar: () => request<TurnoConfig[]>('/turnos'),
+  guardar: (turno: Omit<TurnoConfig, 'created_at'>) =>
+    request<{ mensaje: string }>(`/turnos/${encodeURIComponent(turno.codigo)}`, {
+      method: 'PUT',
+      body: JSON.stringify(turno),
+    }),
 };
 
 export { ApiError };
