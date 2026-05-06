@@ -29,6 +29,8 @@ function estadoPlazaBadge(estado: string) {
 
 type Pestana = 'personas' | 'plazas';
 
+function getSucursal(area: string) { return area.split(' - ')[0]; }
+
 // ——— Modal editar persona ———
 interface ModalPersonaProps {
   persona: Persona;
@@ -248,6 +250,7 @@ function FormAgregarPersona({ onSave, onCancel, saving, error }: FormAgregarPers
 // ——— Página principal ———
 export default function Plantilla() {
   const [pestana, setPestana] = useState<Pestana>('personas');
+  const [sucursalFiltro, setSucursalFiltro] = useState<string>('');
   const puedeEditar = useRequireRole(['admin', 'jefatura']);
   const qc = useQueryClient();
 
@@ -268,13 +271,13 @@ export default function Plantilla() {
 
   const crearPersona = useMutation({
     mutationFn: personasApi.crear,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['personas'] }); setMostrarFormPersona(false); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['personas'] }); setMostrarFormPersona(false); },
     onError: (e: Error) => setErrorModal(e.message),
   });
 
   const actualizarPersona = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Persona> }) => personasApi.actualizar(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['personas'] }); setEditandoPersona(null); setErrorModal(null); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['personas'] }); setEditandoPersona(null); setErrorModal(null); },
     onError: (e: Error) => setErrorModal(e.message),
   });
 
@@ -286,11 +289,16 @@ export default function Plantilla() {
 
   const actualizarPlaza = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Plaza> }) => plazasApi.actualizar(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plazas'] }); setEditandoPlaza(null); setErrorModal(null); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['plazas'] }); setEditandoPlaza(null); setErrorModal(null); },
     onError: (e: Error) => setErrorModal(e.message),
   });
 
   const isLoading = pestana === 'personas' ? loadingP : loadingPl;
+
+  const sucursales = [...new Set((personas ?? []).map((p) => getSucursal(p.area)).filter((s): s is string => !!s))].sort();
+  const personasFiltradas = sucursalFiltro
+    ? (personas ?? []).filter((p) => getSucursal(p.area) === sucursalFiltro)
+    : (personas ?? []);
 
   return (
     <div className="space-y-4">
@@ -298,7 +306,7 @@ export default function Plantilla() {
         <h1 className="text-xl font-bold text-primario">Plantilla</h1>
         <div className="flex items-center gap-4">
           <span className="text-xs text-secundario">
-            {personas.length} personas · {plazas.length} plazas
+            {personasFiltradas.length} personas · {plazas.length} plazas
           </span>
           {puedeEditar && pestana === 'personas' && (
             <Button size="sm" onClick={() => { setMostrarFormPersona(true); setErrorModal(null); }}>
@@ -316,6 +324,27 @@ export default function Plantilla() {
           saving={crearPersona.isPending}
           error={crearPersona.isError ? (crearPersona.error as Error).message : null}
         />
+      )}
+
+      {/* Filtro por sucursal */}
+      {sucursales.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setSucursalFiltro('')}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${sucursalFiltro === '' ? 'bg-primario text-white border-primario' : 'border-borde text-secundario hover:border-primario hover:text-primario'}`}
+          >
+            Todas
+          </button>
+          {sucursales.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSucursalFiltro(s)}
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${sucursalFiltro === s ? 'bg-primario text-white border-primario' : 'border-borde text-secundario hover:border-primario hover:text-primario'}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Pestañas */}
@@ -345,6 +374,7 @@ export default function Plantilla() {
               <tr>
                 <th className="px-4 py-2 text-left">Código</th>
                 <th className="px-4 py-2 text-left">Nombre</th>
+                <th className="px-4 py-2 text-left">Área / Sección</th>
                 <th className="px-4 py-2 text-left">Subárea</th>
                 <th className="px-4 py-2 text-left">Contrato</th>
                 <th className="px-4 py-2 text-left">Ingreso</th>
@@ -353,10 +383,11 @@ export default function Plantilla() {
               </tr>
             </thead>
             <tbody>
-              {personas.map((p) => (
+              {personasFiltradas.map((p) => (
                 <tr key={p.id}>
                   <td className="px-4 py-2 font-mono text-xs">{p.codigo_empleado}</td>
                   <td className="px-4 py-2">{p.nombre}</td>
+                  <td className="px-4 py-2 text-xs text-secundario">{p.area}</td>
                   <td className="px-4 py-2">{LABEL_SUBAREA[p.subarea]}</td>
                   <td className="px-4 py-2 capitalize">{p.tipo_contrato}</td>
                   <td className="px-4 py-2 text-xs">{p.fecha_ingreso}</td>
@@ -390,7 +421,7 @@ export default function Plantilla() {
               ))}
             </tbody>
           </table>
-          {personas.length === 0 && (
+          {personasFiltradas.length === 0 && (
             <p className="text-center text-secundario text-sm py-8">Sin personas activas</p>
           )}
         </div>

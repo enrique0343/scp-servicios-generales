@@ -8,6 +8,7 @@ import PlanMensual from './pages/PlanMensual';
 import SnapshotDiario from './pages/SnapshotDiario';
 import Excepciones from './pages/Excepciones';
 import Usuarios from './pages/Usuarios';
+import Turnos from './pages/Turnos';
 
 export default function App() {
   const { step } = useAuth();
@@ -20,10 +21,6 @@ export default function App() {
     );
   }
 
-  if (step === 'email' || step === 'otp') {
-    return <Login />;
-  }
-
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
@@ -34,6 +31,7 @@ export default function App() {
         <Route path="asistencia/:fecha?" element={<SnapshotDiario />} />
         <Route path="excepciones" element={<Excepciones />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="turnos" element={<Turnos />} />
       </Route>
     </Routes>
   );

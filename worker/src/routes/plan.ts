@@ -8,6 +8,7 @@ import {
   mestieneAsistencia,
   getPlazas,
   getCoberturaVigente,
+  getTurnosConfig,
 } from '../db/queries';
 import { withAudit } from '../middleware/audit';
 import { adminOJefatura, todosLosRoles } from '../middleware/rbac';
@@ -20,7 +21,7 @@ const plan = new Hono<{ Bindings: AppEnv; Variables: Variables }>();
 const lineaPlanSchema = z.object({
   persona_id: z.number().int().positive(),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  turno: z.enum(['D', 'N', 'descanso']),
+  turno: z.string().min(1),
   subarea_asignada: z.enum(['limpieza', 'jardineria', 'lavanderia', 'apoyo_logistico', 'areas_comunes']),
 });
 
@@ -75,6 +76,20 @@ plan.post('/:yyyymm', adminOJefatura, async (c) => {
   }
 
   const user = c.get('user');
+
+  // Valida que los códigos de turno existan en turno_config (o sean 'descanso')
+  const turnosConfig = await getTurnosConfig(c.env.DB);
+  const codigosValidos = new Set(['descanso', ...turnosConfig.map((t) => t.codigo)]);
+  const turnosInvalidos = [...new Set(parsed.data.lineas.map((l) => l.turno).filter((t) => !codigosValidos.has(t)))];
+  if (turnosInvalidos.length > 0) {
+    return c.json({
+      error: {
+        code: 'TURNO_INVALIDO',
+        message: `Códigos de turno no reconocidos: ${turnosInvalidos.join(', ')}`,
+      },
+    }, 400);
+  }
+
   const plazas = await getPlazas(c.env.DB);
   const plazasActivas = plazas.filter((p) => p.persona_id !== null);
 

@@ -3,8 +3,19 @@
 
 export type Rol = 'admin' | 'jefatura' | 'supervisor' | 'lectura';
 export type Subarea = 'limpieza' | 'jardineria' | 'lavanderia' | 'apoyo_logistico' | 'areas_comunes';
-export type TurnoPlan = 'D' | 'N' | 'descanso';
+export type TurnoPlan = string; // código de turno (D, N, 8A, 8B, 24, descanso, ...)
 export type EstadoPlaza = 'autorizada' | 'contratada' | 'vacante';
+
+export interface TurnoConfig {
+  codigo: string;
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  horas_duracion: number;
+  cruza_medianoche: 0 | 1;
+  activo: 0 | 1;
+  created_at: string;
+}
 export type EstadoPersona = 'activo' | 'inactivo' | 'suspendido';
 
 export interface AuthUser {
@@ -104,6 +115,30 @@ export interface Usuario {
   created_at: string;
 }
 
+export interface LineaVistaDiaria {
+  persona_id: number;
+  codigo_empleado: string;
+  nombre: string;
+  subarea: Subarea;
+  area: string;
+  en_plan: boolean;
+  turno_planificado: string | null;
+  subarea_planificada: Subarea | null;
+  asistencia: AsistenciaDiaria | null;
+}
+
+export interface VistaDiaria {
+  fecha: string;
+  lineas: LineaVistaDiaria[];
+  resumen: {
+    planificados: number;
+    presentes: number;
+    ausentes: number;
+    sin_registro: number;
+    horas_totales: number;
+  };
+}
+
 export interface KpiDashboard {
   cumplimiento_cobertura: number;
   tasa_ausentismo: number;
@@ -135,7 +170,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...authHeader,
@@ -144,8 +178,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (res.status === 401) {
-    // Cloudflare Access redirige automáticamente; forzamos recarga para disparar el flujo OTP
-    window.location.reload();
     throw new ApiError(401, 'UNAUTHORIZED', 'Sesión expirada');
   }
 
@@ -223,6 +255,7 @@ export const planApi = {
 
 export const asistenciaApi = {
   obtener: (fecha: string) => request<AsistenciaDiaria[]>(`/asistencia/${fecha}`),
+  vista: (fecha: string) => request<VistaDiaria>(`/asistencia/${fecha}/vista`),
   registrar: (fecha: string, data: Partial<AsistenciaDiaria>) =>
     request<{ mensaje: string }>(`/asistencia/${fecha}`, { method: 'POST', body: JSON.stringify(data) }),
   cerrarDia: (fecha: string) =>
@@ -288,6 +321,19 @@ export const dashboardApi = {
     return request<unknown[]>(`/dashboard/he-clasificada?${params.toString()}`);
   },
   export: (desde: string, hasta: string) => request<unknown[]>(`/dashboard/export?desde=${desde}&hasta=${hasta}`),
+};
+
+// =============================================================
+// Turnos
+// =============================================================
+
+export const turnosApi = {
+  listar: () => request<TurnoConfig[]>('/turnos'),
+  guardar: (turno: Omit<TurnoConfig, 'created_at'>) =>
+    request<{ mensaje: string }>(`/turnos/${encodeURIComponent(turno.codigo)}`, {
+      method: 'PUT',
+      body: JSON.stringify(turno),
+    }),
 };
 
 export { ApiError };

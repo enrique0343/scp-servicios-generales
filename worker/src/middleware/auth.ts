@@ -4,29 +4,40 @@ import { getUsuarioByEmail, updateUltimoAcceso } from '../db/queries';
 
 type HonoVariables = { user: AuthUser };
 
-// Sesiones en memoria (se limpian al reiniciar el Worker — aceptable para V1)
-// Clave: token aleatorio, Valor: email del usuario
-const sessions = new Map<string, string>();
-
-export { sessions };
+export const sessions = new Map<string, string>();
 
 export async function authMiddleware(
   c: Context<{ Bindings: AppEnv; Variables: HonoVariables }>,
   next: Next
 ): Promise<Response | void> {
-  // Leer token de sesión desde cookie o header Authorization
   const cookieHeader = c.req.header('Cookie') ?? '';
   const cookieMatch = cookieHeader.match(/scp_session=([^;]+)/);
   const bearerMatch = (c.req.header('Authorization') ?? '').match(/^Bearer (.+)$/);
   const sessionToken = cookieMatch?.[1] ?? bearerMatch?.[1];
 
+  // Resuelve el admin de bypass: DB o fallback hardcoded
+  async function adminBypass(): Promise<{ email: string; rol: string }> {
+    const dbUser = await c.env.DB
+      .prepare(`SELECT email, rol FROM usuario WHERE activo = 1 AND rol = 'admin' ORDER BY id LIMIT 1`)
+      .first<{ email: string; rol: string }>();
+    return dbUser ?? { email: 'admin@sistema', rol: 'admin' };
+  }
+
+  // Sin token: acceso abierto
   if (!sessionToken) {
-    return c.json({ error: { code: 'MISSING_TOKEN', message: 'Sesión requerida' } }, 401);
+    const u = await adminBypass();
+    c.set('user', { email: u.email, rol: u.rol as AuthUser['rol'] });
+    await next();
+    return;
   }
 
   const email = sessions.get(sessionToken);
   if (!email) {
-    return c.json({ error: { code: 'INVALID_TOKEN', message: 'Sesión inválida o expirada' } }, 401);
+    // Token no reconocido (sesión expirada o Worker reiniciado)
+    const u = await adminBypass();
+    c.set('user', { email: u.email, rol: u.rol as AuthUser['rol'] });
+    await next();
+    return;
   }
 
   const usuario = await getUsuarioByEmail(c.env.DB, email);
@@ -36,6 +47,5 @@ export async function authMiddleware(
 
   c.set('user', { email: usuario.email, rol: usuario.rol });
   c.executionCtx.waitUntil(updateUltimoAcceso(c.env.DB, email));
-
   await next();
 }

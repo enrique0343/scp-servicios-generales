@@ -13,8 +13,19 @@ export type Subarea =
   | 'areas_comunes';
 
 export type TurnoBase = 'D' | 'N';
-export type TurnoReal = 'D' | 'N' | 'descanso' | 'doble';
-export type TurnoPlan = 'D' | 'N' | 'descanso';
+export type TurnoReal = string;   // código de turno o 'descanso'
+export type TurnoPlan = string;   // código de turno o 'descanso'
+
+export interface TurnoConfig {
+  codigo: string;
+  nombre: string;
+  hora_inicio: string;
+  hora_fin: string;
+  horas_duracion: number;
+  cruza_medianoche: 0 | 1;
+  activo: 0 | 1;
+  created_at: string;
+}
 
 export type EstadoPlaza = 'autorizada' | 'contratada' | 'vacante';
 export type EstadoPersona = 'activo' | 'inactivo' | 'suspendido';

@@ -22,13 +22,14 @@ const AuthContext = createContext<AuthContextValue>({
   logout: async () => undefined,
 });
 
-const BASE = '/api/v1';
+const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('scp_token');
+  const authHeader: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeader, ...(init?.headers ?? {}) },
   });
   const json = await res.json() as { data?: T; error?: { code: string; message: string } };
   if (!res.ok) throw new Error(json.error?.message ?? 'Error desconocido');
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     apiFetch<AuthUser>('/auth/me')
       .then((u) => { setUser(u); setStep('authenticated'); })
-      .catch(() => setStep('email'));
+      .catch(() => setStep('authenticated')); // acceso abierto: sin login
   }, []);
 
   const submitEmail = useCallback(async (email: string) => {
